@@ -15,11 +15,11 @@ from sqlalchemy.types import (
     DATETIME,
     DECIMAL,
     INTEGER,
+    TEXT,
     TIME,
     TIMESTAMP,
     VARCHAR,
 )
-
 
 class MySQLConnector(SQLConnector):
     """Sets up SQL Alchemy, and other MySQL related stuff."""
@@ -71,6 +71,7 @@ class MySQLConnector(SQLConnector):
                 partition_keys=partition_keys,
                 as_temp_table=as_temp_table,
             )
+
         for property_name, property_def in schema["properties"].items():
             is_primary_key = property_name in primary_keys
             self.prepare_column(
@@ -202,13 +203,13 @@ class MySQLConnector(SQLConnector):
         elif "integer" in jsonschema_type["type"]:
             picked_type = BIGINT()
         elif "number" in jsonschema_type["type"]:
-            # (65,30) is the maximum precision and scale.
-            # https://dev.mysql.com/doc/refman/8.0/en/precision-math-decimal-characteristics.html
             picked_type = DECIMAL(65, 30)
         elif "object" in jsonschema_type["type"] or "array" in jsonschema_type["type"]:
             picked_type = JSON()
         elif jsonschema_type.get("format") == "date-time":
             picked_type = TIMESTAMP()
+        elif jsonschema_type.get("format") == "uri":  # NEW: Handle URI fields
+            picked_type = TEXT()
         else:
             picked_type = th.to_sql_type(jsonschema_type)
         return picked_type
@@ -231,6 +232,7 @@ class MySQLConnector(SQLConnector):
         """
         precedence_order = [
             JSON,
+            TEXT,
             VARCHAR,
             TIMESTAMP,
             DATETIME,
@@ -252,6 +254,8 @@ class MySQLConnector(SQLConnector):
         for sql_type in precedence_order:
             for obj in sql_type_array:
                 if isinstance(obj, sql_type):
+                    if isinstance(obj, TEXT):
+                        return TEXT()
                     if isinstance(obj, VARCHAR):
                         if is_primary_key:
                             return VARCHAR(length=max_varchar_primary_key_size)
